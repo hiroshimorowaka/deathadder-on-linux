@@ -7,10 +7,23 @@ use std::{
     },
     thread,
 };
+mod keyboard_buttons;
+
+use keyboard_buttons::KeyboardButtons;
+
+use clap::Parser;
+
+#[derive(Parser, Debug)]
+#[command()]
+struct Args {
+    #[arg(short, long)]
+    reattach: bool,
+}
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let vid = 0x1532; // Vendor Id
-    let pid = 0x0084; // Product ID
+    // Vendor ID and Product ID of Razer Deathadder V2
+    let vid = 0x1532;
+    let pid = 0x0084;
 
     let device =
         rusb::open_device_with_vid_pid(vid, pid).expect("Device with this VID/PID not found");
@@ -19,11 +32,22 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let handle = device;
 
     let interface_number = 2; // DPI Buttons
+
+    let args = Args::parse();
+
+    if args.reattach {
+        println!("Reattaching kernel driver...");
+        handle.attach_kernel_driver(interface_number)?;
+        println!("Kernel driver reattached. Goodbye!");
+        return Ok(());
+    }
+
     handle.detach_kernel_driver(interface_number).ok();
     handle.claim_interface(interface_number)?;
 
     println!("Interface Claimed, waiting for packets...");
 
+    // Detect Ctrl-C and stop program without just closing it, for driver reattachment
     let running = Arc::new(AtomicBool::new(true));
     {
         let running = running.clone();
@@ -36,8 +60,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let endpoint_address = 0x83; // DPI Buttons Endpoint
     let mut buf = [0u8; 8];
 
+    // Create a thread to handle the packets
     let (tx, rx) = mpsc::channel();
-
     thread::spawn(move || {
         while let Ok(button) = rx.recv() {
             match button {
@@ -57,12 +81,16 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 if size == 8 {
                     println!("Packet received ({} bytes): {:?}", size, &buf[..size]);
                     let key_pressed = buf[2] as u8;
-                    let keyboard_button = parse_special_mouse_button_packet(key_pressed);
+                    let keyboard_button = KeyboardButtons::from_code(key_pressed);
                     match keyboard_button {
                         Some(keyboard_button) => {
                             tx.send(keyboard_button).ok(); // Send to thread
                         }
-                        None => {}
+                        None => {
+                            if key_pressed != 0 {
+                                println!("Unknown key pressed: {}", key_pressed);
+                            }
+                        }
                     }
                 } else {
                     println!("Unexpected packet size: {}", size);
@@ -84,18 +112,4 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("Kernel driver reattached. Goodbye!");
 
     Ok(())
-}
-
-enum KeyboardButtons {
-    F23,
-    F24,
-}
-
-fn parse_special_mouse_button_packet(packet: u8) -> Option<KeyboardButtons> {
-    let keyboard_button = match packet {
-        114 => Some(KeyboardButtons::F23),
-        115 => Some(KeyboardButtons::F24),
-        _ => None,
-    };
-    return keyboard_button;
 }

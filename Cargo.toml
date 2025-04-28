@@ -7,3 +7,4 @@ edition = "2021"
 rusb = "0.9.4"
 ctrlc = "3.2.5"
 autopilot = "0.4"
+clap = { version = "4.1.8", features = ["derive"] }
