@@ -18,7 +18,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let handle = device;
 
-    let interface_number = 2; // Botões de DPI
+    let interface_number = 2; // DPI Buttons
     handle.detach_kernel_driver(interface_number).ok();
     handle.claim_interface(interface_number)?;
 
@@ -33,7 +33,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .expect("Error setting Ctrl-C handler");
     }
 
-    let endpoint_address = 0x83; // Endpoint de botões especiais
+    let endpoint_address = 0x83; // DPI Buttons Endpoint
     let mut buf = [0u8; 8];
 
     let (tx, rx) = mpsc::channel();
@@ -52,7 +52,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     });
 
     while running.load(Ordering::SeqCst) {
-        match handle.read_interrupt(endpoint_address, &mut buf, Duration::from_millis(5)) {
+        match handle.read_interrupt(endpoint_address, &mut buf, Duration::from_millis(300)) {
             Ok(size) => {
                 if size == 8 {
                     println!("Packet received ({} bytes): {:?}", size, &buf[..size]);
@@ -60,7 +60,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     let keyboard_button = parse_special_mouse_button_packet(key_pressed);
                     match keyboard_button {
                         Some(keyboard_button) => {
-                            tx.send(keyboard_button).ok(); // Envia para a thread
+                            tx.send(keyboard_button).ok(); // Send to thread
                         }
                         None => {}
                     }
@@ -69,7 +69,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 }
             }
             Err(rusb::Error::Timeout) => {
-                // Timeout é normal no loop
+                // Ignore timeouts
             }
             Err(e) => {
                 eprintln!("Read error: {:?}", e);
