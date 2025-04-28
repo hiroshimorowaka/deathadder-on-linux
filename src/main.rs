@@ -1,3 +1,4 @@
+use autopilot::key::{Code, KeyCode};
 use std::time::Duration;
 use std::{
     sync::{
@@ -7,49 +8,37 @@ use std::{
     thread,
 };
 
-use autopilot::key::{Code, KeyCode, KeyCodeConvertible};
-
-// use enigo::{Enigo, Key, Keyboard, Settings};
-
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let vid = 0x1532; // Vendor Id
     let pid = 0x0084; // Product ID
 
-    let device = rusb::open_device_with_vid_pid(vid, pid).expect("Dispositivo não encontrado");
-    println!("Dispositivo encontrado: VID={:04x} PID={:04x}", vid, pid);
+    let device =
+        rusb::open_device_with_vid_pid(vid, pid).expect("Device with this VID/PID not found");
+    println!("Device Found: VID={:04x} PID={:04x}", vid, pid);
 
     let handle = device;
 
-    // let interface_number = 0; // Movimento do mouse
     let interface_number = 2; // Botões de DPI
     handle.detach_kernel_driver(interface_number).ok();
     handle.claim_interface(interface_number)?;
 
-    println!("Interface 2 claimada, começando leitura...");
+    println!("Interface Claimed, waiting for packets...");
 
-    // Para detectar Ctrl+C
     let running = Arc::new(AtomicBool::new(true));
     {
         let running = running.clone();
         ctrlc::set_handler(move || {
             running.store(false, Ordering::SeqCst);
         })
-        .expect("Erro ao instalar handler Ctrl+C");
+        .expect("Error setting Ctrl-C handler");
     }
 
-    // let endpoint_address = 0x81; // Endpoint de leitura do mouse
     let endpoint_address = 0x83; // Endpoint de botões especiais
     let mut buf = [0u8; 8];
 
-    // let keymap = build_keymap();
-    // let mut enigo = Enigo::new(&Settings::default()).unwrap();
-
     let (tx, rx) = mpsc::channel();
 
-    // Thread separada para processar teclas
-
     thread::spawn(move || {
-        // let mut enigo = Enigo::new(&Settings::default()).unwrap();
         while let Ok(button) = rx.recv() {
             match button {
                 KeyboardButtons::KeyF23 => {
@@ -66,7 +55,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         match handle.read_interrupt(endpoint_address, &mut buf, Duration::from_millis(5)) {
             Ok(size) => {
                 if size == 8 {
-                    println!("Pacote recebido ({} bytes): {:?}", size, &buf[..size]);
+                    println!("Packet received ({} bytes): {:?}", size, &buf[..size]);
                     let key_pressed = buf[2] as u8;
                     let keyboard_button = parse_special_mouse_button_packet(key_pressed);
                     match keyboard_button {
@@ -76,23 +65,23 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                         None => {}
                     }
                 } else {
-                    println!("Pacote de tamanho inesperado: {}", size);
+                    println!("Unexpected packet size: {}", size);
                 }
             }
             Err(rusb::Error::Timeout) => {
                 // Timeout é normal no loop
             }
             Err(e) => {
-                eprintln!("Erro de leitura: {:?}", e);
+                eprintln!("Read error: {:?}", e);
                 break;
             }
         }
     }
 
-    println!("Liberando interface...");
+    println!("Releasing interface...");
     handle.release_interface(interface_number)?;
     handle.attach_kernel_driver(interface_number)?;
-    println!("Driver do kernel reanexado. Finalizando.");
+    println!("Kernel driver reattached. Goodbye!");
 
     Ok(())
 }
