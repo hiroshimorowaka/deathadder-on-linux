@@ -41,10 +41,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     thread::spawn(move || {
         while let Ok(button) = rx.recv() {
             match button {
-                KeyboardButtons::KeyF23 => {
+                KeyboardButtons::F23 => {
                     autopilot::key::tap(&Code(KeyCode::PrintScreen), &[], 1, 0);
                 }
-                KeyboardButtons::KeyF24 => {
+                KeyboardButtons::F24 => {
                     autopilot::key::tap(&Code(KeyCode::ScrollLock), &[], 1, 0);
                 }
             }
@@ -87,14 +87,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 enum KeyboardButtons {
-    KeyF23,
-    KeyF24,
+    F23,
+    F24,
 }
 
 fn parse_special_mouse_button_packet(packet: u8) -> Option<KeyboardButtons> {
     let keyboard_button = match packet {
-        114 => Some(KeyboardButtons::KeyF23),
-        115 => Some(KeyboardButtons::KeyF24),
+        114 => Some(KeyboardButtons::F23),
+        115 => Some(KeyboardButtons::F24),
         _ => None,
     };
     return keyboard_button;
